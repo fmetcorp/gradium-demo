@@ -559,6 +559,11 @@ HTML_PAGE = r"""
                         <input type="checkbox" id="echo-mode">
                         <label for="echo-mode">Enable echo (speak back transcription)</label>
                     </div>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="llm-mode">
+                        <label for="llm-mode">Enable AI reply (OpenAI)</label>
+                    </div>
                 </div>
                 
                 <div id="stt-status" class="status"></div>
@@ -797,7 +802,7 @@ recordBtn.addEventListener('click', async () => {
 
 
 async function doLLM(userText) {
-    if (!llmMode.checked) return;
+    if (!llmMode || !llmMode.checked) return;
 
     assistantReply.textContent = '';
     assistantReply.className = 'transcript-box empty';
