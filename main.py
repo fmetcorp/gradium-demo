@@ -32,7 +32,8 @@ app = FastAPI(title="Gradium Demo")
 client = gradium.client.GradiumClient()
 
 # OpenAI LLM (set OPENAI_API_KEY in Railway Variables)
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.2")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+print(f"[OpenAI] OPENAI_MODEL={OPENAI_MODEL}")
 OPENAI_SYSTEM_PROMPT = (
     "You are Gradium, a helpful voice assistant on a phone call. "
     "Be concise. Ask at most one question at a time. "
@@ -61,19 +62,29 @@ async def _openai_reply(call_sid: Optional[str], user_text: str) -> str:
     # Keep the last 10 messages to stay fast
     recent = hist[-10:]
 
-    def _call_openai():
+    def _call_openai(model_name: str):
         oa = OpenAI()
-        return oa.responses.create(
-            model=OPENAI_MODEL,
-            reasoning={"effort": "low"},
-            input=[{"role": "developer", "content": OPENAI_SYSTEM_PROMPT}] + recent,
-        )
+        kwargs = {
+            "model": model_name,
+            "input": [{"role": "developer", "content": OPENAI_SYSTEM_PROMPT}] + recent,
+        }
+        if model_name.startswith("gpt-5"):
+            kwargs["reasoning"] = {"effort": "low"}
+        return oa.responses.create(**kwargs)
 
     try:
-        resp = await asyncio.to_thread(_call_openai)
+        resp = await asyncio.to_thread(_call_openai, OPENAI_MODEL)
         assistant_text = (getattr(resp, "output_text", "") or "").strip()
     except Exception as e:
-        assistant_text = f"Sorry, the language model failed: {str(e)}"
+        msg = str(e).lower()
+        if ("verified" in msg or "verification" in msg or "organization" in msg) and OPENAI_MODEL != "gpt-4o-mini":
+            try:
+                resp = await asyncio.to_thread(_call_openai, "gpt-4o-mini")
+                assistant_text = (getattr(resp, "output_text", "") or "").strip()
+            except Exception as e2:
+                assistant_text = f"Sorry, the language model failed: {str(e2)}"
+        else:
+            assistant_text = f"Sorry, the language model failed: {str(e)}"
 
     if not assistant_text:
         assistant_text = "Sorry, I did not get that. Can you say it again?"
@@ -553,6 +564,8 @@ HTML_PAGE = r"""
                 <div id="stt-status" class="status"></div>
                 
                 <div id="transcript" class="transcript-box empty">Transcription will appear here...</div>
+
+                <div id="assistant-reply" class="transcript-box empty">AI reply will appear here...</div>
                 
                 <audio id="echo-audio" controls style="display: none;"></audio>
                 
@@ -565,6 +578,16 @@ HTML_PAGE = r"""
 
 <script>
 // ============ Utility Functions ============
+function getSessionId() {
+    const key = 'gradium_session_id';
+    let sid = localStorage.getItem(key);
+    if (!sid) {
+        sid = (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+        localStorage.setItem(key, sid);
+    }
+    return sid;
+}
+
 async function loadVoices(lang, selectElement) {
     try {
         const response = await fetch(`/api/voices?lang=${encodeURIComponent(lang)}`);
@@ -606,6 +629,8 @@ const echoLang = document.getElementById('echo-lang');
 const echoVoice = document.getElementById('echo-voice');
 const echoMode = document.getElementById('echo-mode');
 const echoAudio = document.getElementById('echo-audio');
+const llmMode = document.getElementById('llm-mode');
+const assistantReply = document.getElementById('assistant-reply');
 
 // ============ Tab Switching ============
 document.querySelectorAll('.tab').forEach(tab => {
@@ -702,7 +727,12 @@ sttBtn.addEventListener('click', async () => {
             transcript.className = 'transcript-box';
             showStatus('stt-status', '✓ Transcription complete!', 'success');
             
-            if (echoMode.checked) {
+            assistantReply.textContent = 'AI reply will appear here...';
+            assistantReply.className = 'transcript-box empty';
+
+            if (llmMode.checked) {
+                await doLLM(text);
+            } else if (echoMode.checked) {
                 await doEcho(text);
             }
         } else {
@@ -764,6 +794,68 @@ recordBtn.addEventListener('click', async () => {
         await startRecording();
     }
 });
+
+
+async function doLLM(userText) {
+    if (!llmMode.checked) return;
+
+    assistantReply.textContent = '';
+    assistantReply.className = 'transcript-box empty';
+    showStatus('stt-status', '⏳ Thinking...', 'loading');
+
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text: userText,
+                session_id: getSessionId()
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(err || 'Chat failed');
+        }
+
+        const data = await response.json();
+        const assistantText = (data.assistant_text || '').trim();
+
+        if (!assistantText) {
+            assistantReply.textContent = '(No reply)';
+            assistantReply.className = 'transcript-box empty';
+            showStatus('stt-status', 'No reply from model', 'error');
+            return;
+        }
+
+        assistantReply.textContent = assistantText;
+        assistantReply.className = 'transcript-box';
+        showStatus('stt-status', '⏳ Speaking...', 'loading');
+
+        const ttsResp = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text: assistantText,
+                voice_id: echoVoice.value,
+                output_format: 'wav'
+            })
+        });
+
+        if (!ttsResp.ok) throw new Error('TTS failed');
+
+        const audioBlob = await ttsResp.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        echoAudio.src = audioUrl;
+        echoAudio.style.display = 'block';
+        await echoAudio.play();
+
+        showStatus('stt-status', `✓ AI reply ready (model: ${data.model || 'unknown'})`, 'success');
+    } catch (error) {
+        console.error('LLM error:', error);
+        showStatus('stt-status', `Error: ${error.message}`, 'error');
+    }
+}
 
 async function startRecording() {
     try {
@@ -839,6 +931,8 @@ async function startRecording() {
         
         transcript.textContent = '';
         transcript.className = 'transcript-box empty';
+        assistantReply.textContent = 'AI reply will appear here...';
+        assistantReply.className = 'transcript-box empty';
         echoAudio.style.display = 'none';
         showStatus('stt-status', '🎤 Recording... Click stop when done.', 'loading');
         
@@ -998,6 +1092,22 @@ async def speech_to_text(file: UploadFile = File(...)):
         return JSONResponse(status_code=500, content={"error": error_msg})
 
 
+
+
+class ChatRequest(BaseModel):
+    text: str
+    session_id: Optional[str] = None
+
+
+@app.post("/api/chat")
+async def api_chat(req: ChatRequest):
+    text_in = (req.text or "").strip()
+    if not text_in:
+        return JSONResponse(status_code=400, content={"error": "Missing text"})
+
+    session_id = (req.session_id or "web").strip() or "web"
+    assistant_text = await _openai_reply(session_id, text_in)
+    return {"assistant_text": assistant_text, "model": OPENAI_MODEL}
 
 # -------------------------
 # Twilio voice webhook routes (Gradium STT + TTS)
