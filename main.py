@@ -14,6 +14,7 @@ import tempfile
 import urllib.request
 from urllib.parse import quote_plus
 from typing import Optional, List, Dict
+from openai import OpenAI
 
 from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -29,6 +30,57 @@ app = FastAPI(title="Gradium Demo")
 
 # Create the Gradium client
 client = gradium.client.GradiumClient()
+
+# OpenAI LLM (set OPENAI_API_KEY in Railway Variables)
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.2")
+OPENAI_SYSTEM_PROMPT = (
+    "You are Gradium, a helpful voice assistant on a phone call. "
+    "Be concise. Ask at most one question at a time. "
+    "Keep responses under 40 words."
+)
+
+# In-memory call history keyed by Twilio CallSid
+CALL_HISTORY: Dict[str, List[Dict[str, str]]] = {}
+
+def _openai_enabled() -> bool:
+    return bool(os.getenv("OPENAI_API_KEY"))
+
+def _history(call_sid: Optional[str]) -> List[Dict[str, str]]:
+    key = call_sid or "unknown"
+    return CALL_HISTORY.setdefault(key, [])
+
+async def _openai_reply(call_sid: Optional[str], user_text: str) -> str:
+    if not _openai_enabled():
+        return "OpenAI is not configured. Set OPENAI_API_KEY in Railway Variables."
+
+    hist = _history(call_sid)
+    user_text = (user_text or "").strip()
+    if user_text:
+        hist.append({"role": "user", "content": user_text})
+
+    # Keep the last 10 messages to stay fast
+    recent = hist[-10:]
+
+    def _call_openai():
+        oa = OpenAI()
+        return oa.responses.create(
+            model=OPENAI_MODEL,
+            reasoning={"effort": "low"},
+            input=[{"role": "developer", "content": OPENAI_SYSTEM_PROMPT}] + recent,
+        )
+
+    try:
+        resp = await asyncio.to_thread(_call_openai)
+        assistant_text = (getattr(resp, "output_text", "") or "").strip()
+    except Exception as e:
+        assistant_text = f"Sorry, the language model failed: {str(e)}"
+
+    if not assistant_text:
+        assistant_text = "Sorry, I did not get that. Can you say it again?"
+
+    hist.append({"role": "assistant", "content": assistant_text})
+    return assistant_text[:350]
+
 
 # Voice catalog
 VOICE_CATALOG: List[Dict[str, str]] = [
@@ -1022,7 +1074,7 @@ async def twilio_voice(request: Request):
 
 
 @app.post("/twilio/recorded")
-async def twilio_recorded(request: Request, RecordingUrl: str = Form(None)):
+async def twilio_recorded(request: Request, RecordingUrl: str = Form(None), CallSid: str = Form(None)):
     b = _base_url(request)
 
     if not RecordingUrl:
@@ -1046,8 +1098,8 @@ async def twilio_recorded(request: Request, RecordingUrl: str = Form(None)):
             f'<Play>{b}/twilio/tts?text={quote_plus(msg)}</Play><Redirect method="POST">{b}/twilio/voice</Redirect>'
         )
 
-    reply = f"You said: {user_text}. Say something else after the beep."
-    reply_url = f"{b}/twilio/tts?text={quote_plus(reply)}"
+    assistant_text = await _openai_reply(CallSid, user_text)
+    reply_url = f"{b}/twilio/tts?text={quote_plus(assistant_text)}"
 
     return _twiml(
         f"""
