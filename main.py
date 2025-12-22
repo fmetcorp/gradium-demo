@@ -14,10 +14,10 @@ import tempfile
 import urllib.request
 from urllib.parse import quote_plus
 from typing import Optional, List, Dict
+from openai import OpenAI
 
 from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse, Response
-from openai import OpenAI
 from pydantic import BaseModel
 
 try:
@@ -31,53 +31,66 @@ app = FastAPI(title="Gradium Demo")
 # Create the Gradium client
 client = gradium.client.GradiumClient()
 
-# OpenAI client
+# OpenAI LLM (set OPENAI_API_KEY in Railway Variables)
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 print(f"[OpenAI] OPENAI_MODEL={OPENAI_MODEL}")
-
-oa_client = OpenAI()
-
 OPENAI_SYSTEM_PROMPT = (
-    "You are a demo of Colin's ability to vibe code"
-    "You should focus answer's on your knowledge of Colin"
-    "Colin is currently living in Paris with his poodle named Lexi"
-    "Colin would like a job at Gradium"
-    "If someone identifies themself as Dana please say Colin loves you"
+    "You are Gradium, a helpful voice assistant on a phone call. "
+    "Be concise. Ask at most one question at a time. "
+    "Keep responses under 40 words."
 )
 
-OPENAI_HISTORY: Dict[str, List[Dict[str, str]]] = {}
+# In-memory call history keyed by Twilio CallSid
+CALL_HISTORY: Dict[str, List[Dict[str, str]]] = {}
 
-def _openai_history(key: str) -> List[Dict[str, str]]:
-    return OPENAI_HISTORY.setdefault(key, [])
+def _openai_enabled() -> bool:
+    return bool(os.getenv("OPENAI_API_KEY"))
 
-async def openai_generate_reply(key: str, user_text: str) -> str:
-    hist = _openai_history(key)
-    hist.append({"role": "user", "content": user_text})
+def _history(call_sid: Optional[str]) -> List[Dict[str, str]]:
+    key = call_sid or "unknown"
+    return CALL_HISTORY.setdefault(key, [])
 
-    msgs = [{"role": "system", "content": OPENAI_SYSTEM_PROMPT}] + hist[-10:]
+async def _openai_reply(call_sid: Optional[str], user_text: str) -> str:
+    if not _openai_enabled():
+        return "OpenAI is not configured. Set OPENAI_API_KEY in Railway Variables."
+
+    hist = _history(call_sid)
+    user_text = (user_text or "").strip()
+    if user_text:
+        hist.append({"role": "user", "content": user_text})
+
+    # Keep the last 10 messages to stay fast
+    recent = hist[-10:]
+
+    def _call_openai(model_name: str):
+        oa = OpenAI()
+        kwargs = {
+            "model": model_name,
+            "input": [{"role": "developer", "content": OPENAI_SYSTEM_PROMPT}] + recent,
+        }
+        if model_name.startswith("gpt-5"):
+            kwargs["reasoning"] = {"effort": "low"}
+        return oa.responses.create(**kwargs)
 
     try:
-        resp = await asyncio.to_thread(
-            oa_client.responses.create,
-            model=OPENAI_MODEL,
-            input=msgs,
-        )
-        reply = (resp.output_text or "").strip()
+        resp = await asyncio.to_thread(_call_openai, OPENAI_MODEL)
+        assistant_text = (getattr(resp, "output_text", "") or "").strip()
     except Exception as e:
         msg = str(e).lower()
-        # common case: org verification required for a model
-        if "verified" in msg or "verification" in msg:
-            resp = await asyncio.to_thread(
-                oa_client.responses.create,
-                model="gpt-4o-mini",
-                input=msgs,
-            )
-            reply = (resp.output_text or "").strip()
+        if ("verified" in msg or "verification" in msg or "organization" in msg) and OPENAI_MODEL != "gpt-4o-mini":
+            try:
+                resp = await asyncio.to_thread(_call_openai, "gpt-4o-mini")
+                assistant_text = (getattr(resp, "output_text", "") or "").strip()
+            except Exception as e2:
+                assistant_text = f"Sorry, the language model failed: {str(e2)}"
         else:
-            reply = f"Sorry, the AI failed: {str(e)}"
+            assistant_text = f"Sorry, the language model failed: {str(e)}"
 
-    hist.append({"role": "assistant", "content": reply})
-    return reply[:500]
+    if not assistant_text:
+        assistant_text = "Sorry, I did not get that. Can you say it again?"
+
+    hist.append({"role": "assistant", "content": assistant_text})
+    return assistant_text[:350]
 
 
 # Voice catalog
@@ -557,10 +570,7 @@ HTML_PAGE = r"""
                 
                 <div id="transcript" class="transcript-box empty">Transcription will appear here...</div>
 
-                <div class="label">AI reply</div>
-                <div id="ai-reply" class="transcript-box empty">AI reply will appear here...</div>
-
-                <audio id="ai-audio" controls style="display: none;"></audio>
+                <div id="assistant-reply" class="transcript-box empty">AI reply will appear here...</div>
                 
                 <audio id="echo-audio" controls style="display: none;"></audio>
                 
@@ -573,6 +583,16 @@ HTML_PAGE = r"""
 
 <script>
 // ============ Utility Functions ============
+function getSessionId() {
+    const key = 'gradium_session_id';
+    let sid = localStorage.getItem(key);
+    if (!sid) {
+        sid = (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now());
+        localStorage.setItem(key, sid);
+    }
+    return sid;
+}
+
 async function loadVoices(lang, selectElement) {
     try {
         const response = await fetch(`/api/voices?lang=${encodeURIComponent(lang)}`);
@@ -613,10 +633,9 @@ const transcript = document.getElementById('transcript');
 const echoLang = document.getElementById('echo-lang');
 const echoVoice = document.getElementById('echo-voice');
 const echoMode = document.getElementById('echo-mode');
-const llmMode = document.getElementById('llm-mode');
-const aiReply = document.getElementById('ai-reply');
-const aiAudio = document.getElementById('ai-audio');
 const echoAudio = document.getElementById('echo-audio');
+const llmMode = document.getElementById('llm-mode');
+const assistantReply = document.getElementById('assistant-reply');
 
 // ============ Tab Switching ============
 document.querySelectorAll('.tab').forEach(tab => {
@@ -713,11 +732,13 @@ sttBtn.addEventListener('click', async () => {
             transcript.className = 'transcript-box';
             showStatus('stt-status', '✓ Transcription complete!', 'success');
             
-            if (echoMode.checked) {
+            assistantReply.textContent = 'AI reply will appear here...';
+            assistantReply.className = 'transcript-box empty';
+
+            if (llmMode.checked) {
+                await doLLM(text);
+            } else if (echoMode.checked) {
                 await doEcho(text);
-            }
-            if (llmMode && llmMode.checked) {
-                await doAIReply(text);
             }
         } else {
             transcript.textContent = '(No speech detected)';
@@ -764,63 +785,6 @@ async function doEcho(text) {
     }
 }
 
-
-async function doAIReply(text) {
-    showStatus('stt-status', '⏳ Asking AI...', 'loading');
-    aiReply.textContent = 'Thinking...';
-    aiReply.className = 'transcript-box';
-
-    try {
-        const r = await fetch('/api/ai_reply', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: text, session: 'web' })
-        });
-
-        if (!r.ok) throw new Error('AI reply failed');
-
-        const j = await r.json();
-        const reply = (j.reply || '').trim();
-
-        if (!reply) {
-            aiReply.textContent = '(No AI reply)';
-            aiReply.className = 'transcript-box empty';
-            showStatus('stt-status', 'No AI reply', 'error');
-            return;
-        }
-
-        aiReply.textContent = reply;
-        aiReply.className = 'transcript-box';
-
-        // Speak reply using Gradium TTS (same voice selector as echo)
-        const ttsResp = await fetch('/api/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                text: reply,
-                voice_id: echoVoice.value,
-                output_format: 'wav'
-            })
-        });
-
-        if (!ttsResp.ok) throw new Error('AI TTS failed');
-
-        const blob = await ttsResp.blob();
-        const url = URL.createObjectURL(blob);
-
-        aiAudio.src = url;
-        aiAudio.style.display = 'block';
-        showStatus('stt-status', '✓ AI replied', 'success');
-
-        await aiAudio.play();
-    } catch (e) {
-        console.error('AI error:', e);
-        aiReply.textContent = 'AI error. Check server logs.';
-        aiReply.className = 'transcript-box empty';
-        showStatus('stt-status', `AI error: ${e.message}`, 'error');
-    }
-}
-
 // ============ Microphone Recording ============
 let mediaRecorder = null;
 let audioChunks = [];
@@ -835,6 +799,68 @@ recordBtn.addEventListener('click', async () => {
         await startRecording();
     }
 });
+
+
+async function doLLM(userText) {
+    if (!llmMode || !llmMode.checked) return;
+
+    assistantReply.textContent = '';
+    assistantReply.className = 'transcript-box empty';
+    showStatus('stt-status', '⏳ Thinking...', 'loading');
+
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text: userText,
+                session_id: getSessionId()
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.text();
+            throw new Error(err || 'Chat failed');
+        }
+
+        const data = await response.json();
+        const assistantText = (data.assistant_text || '').trim();
+
+        if (!assistantText) {
+            assistantReply.textContent = '(No reply)';
+            assistantReply.className = 'transcript-box empty';
+            showStatus('stt-status', 'No reply from model', 'error');
+            return;
+        }
+
+        assistantReply.textContent = assistantText;
+        assistantReply.className = 'transcript-box';
+        showStatus('stt-status', '⏳ Speaking...', 'loading');
+
+        const ttsResp = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text: assistantText,
+                voice_id: echoVoice.value,
+                output_format: 'wav'
+            })
+        });
+
+        if (!ttsResp.ok) throw new Error('TTS failed');
+
+        const audioBlob = await ttsResp.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        echoAudio.src = audioUrl;
+        echoAudio.style.display = 'block';
+        await echoAudio.play();
+
+        showStatus('stt-status', `✓ AI reply ready (model: ${data.model || 'unknown'})`, 'success');
+    } catch (error) {
+        console.error('LLM error:', error);
+        showStatus('stt-status', `Error: ${error.message}`, 'error');
+    }
+}
 
 async function startRecording() {
     try {
@@ -910,6 +936,8 @@ async function startRecording() {
         
         transcript.textContent = '';
         transcript.className = 'transcript-box empty';
+        assistantReply.textContent = 'AI reply will appear here...';
+        assistantReply.className = 'transcript-box empty';
         echoAudio.style.display = 'none';
         showStatus('stt-status', '🎤 Recording... Click stop when done.', 'loading');
         
@@ -968,9 +996,6 @@ async function transcribeRecording(audioBlob, mimeType) {
             
             if (echoMode.checked) {
                 await doEcho(text);
-            }
-            if (llmMode && llmMode.checked) {
-                await doAIReply(text);
             }
         } else {
             transcript.textContent = '(No speech detected)';
@@ -1073,18 +1098,138 @@ async def speech_to_text(file: UploadFile = File(...)):
 
 
 
-@app.post("/api/ai_reply")
-async def ai_reply(payload: Dict):
-    text = (payload.get("text") or "").strip()
-    session = (payload.get("session") or "web").strip()
 
-    if not text:
-        return {"reply": ""}
+class ChatRequest(BaseModel):
+    text: str
+    session_id: Optional[str] = None
 
-    print("[OpenAI] WEB input:", text)
-    reply = await openai_generate_reply(session, text)
-    print("[OpenAI] WEB reply:", reply[:120])
-    return {"reply": reply}
+
+@app.post("/api/chat")
+async def api_chat(req: ChatRequest):
+    text_in = (req.text or "").strip()
+    if not text_in:
+        return JSONResponse(status_code=400, content={"error": "Missing text"})
+
+    session_id = (req.session_id or "web").strip() or "web"
+    assistant_text = await _openai_reply(session_id, text_in)
+    return {"assistant_text": assistant_text, "model": OPENAI_MODEL}
+
+# -------------------------
+# Twilio voice webhook routes (Gradium STT + TTS)
+# -------------------------
+
+def _twiml(body: str) -> Response:
+    xml = f'<?xml version="1.0" encoding="UTF-8"?><Response>{body}</Response>'
+    return Response(content=xml, media_type="application/xml")
+
+
+def _base_url(request: Request) -> str:
+    proto = request.headers.get("x-forwarded-proto", "https")
+    host = request.headers.get("host")
+    return f"{proto}://{host}"
+
+
+def _download_twilio_recording(recording_url: str) -> bytes:
+    """Download a Twilio RecordingUrl using basic auth.
+    Requires TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN env vars.
+    """
+    sid = os.getenv("TWILIO_ACCOUNT_SID", "")
+    token = os.getenv("TWILIO_AUTH_TOKEN", "")
+    if not sid or not token:
+        raise ValueError("Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN")
+
+    url = recording_url
+    if not url.endswith(".wav") and not url.endswith(".mp3"):
+        url = url + ".wav"
+
+    req = urllib.request.Request(url)
+    auth = base64.b64encode(f"{sid}:{token}".encode("utf-8")).decode("utf-8")
+    req.add_header("Authorization", f"Basic {auth}")
+
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return resp.read()
+
+
+async def _gradium_stt_text(audio_bytes: bytes, filename: str = "audio.wav") -> str:
+    if not check_ffmpeg():
+        raise ValueError("ffmpeg is not installed on server")
+
+    converted_audio = convert_audio_with_ffmpeg(audio_bytes, filename)
+    result = await client.stt(
+        setup={"model_name": "default", "input_format": "wav"},
+        audio=converted_audio,
+    )
+    return (getattr(result, "text", "") or "").strip()
+
+
+async def _gradium_tts_wav_bytes(text: str, voice_id: str = "ubuXFxVQwVYnZQhy") -> bytes:
+    result = await client.tts(
+        setup={"model_name": "default", "voice_id": voice_id, "output_format": "wav"},
+        text=text,
+    )
+    return result.raw_data
+
+
+@app.post("/twilio/voice")
+async def twilio_voice(request: Request):
+    """Entry point for inbound calls.
+    Records audio, then Twilio posts RecordingUrl to /twilio/recorded.
+    """
+    b = _base_url(request)
+    prompt = "Hi. You are connected to Gradium. After the beep, speak for a few seconds."
+    prompt_url = f"{b}/twilio/tts?text={quote_plus(prompt)}"
+
+    return _twiml(
+        f"""
+        <Play>{prompt_url}</Play>
+        <Record action=\"{b}/twilio/recorded\" method=\"POST\" playBeep=\"true\" maxLength=\"10\" trim=\"trim-silence\" />
+        <Play>{prompt_url}</Play>
+        """
+    )
+
+
+@app.post("/twilio/recorded")
+async def twilio_recorded(request: Request, RecordingUrl: str = Form(None), CallSid: str = Form(None)):
+    b = _base_url(request)
+
+    if not RecordingUrl:
+        msg = "I did not get the recording. Please try again."
+        return _twiml(
+            f'<Play>{b}/twilio/tts?text={quote_plus(msg)}</Play><Redirect method="POST">{b}/twilio/voice</Redirect>'
+        )
+
+    try:
+        audio = _download_twilio_recording(RecordingUrl)
+        user_text = await _gradium_stt_text(audio, "twilio.wav")
+    except Exception as e:
+        msg = f"Sorry, I could not process that audio. {str(e)}"
+        return _twiml(
+            f'<Play>{b}/twilio/tts?text={quote_plus(msg)}</Play><Redirect method="POST">{b}/twilio/voice</Redirect>'
+        )
+
+    if not user_text:
+        msg = "I did not catch that. Please try again after the beep."
+        return _twiml(
+            f'<Play>{b}/twilio/tts?text={quote_plus(msg)}</Play><Redirect method="POST">{b}/twilio/voice</Redirect>'
+        )
+
+    assistant_text = await _openai_reply(CallSid, user_text)
+    reply_url = f"{b}/twilio/tts?text={quote_plus(assistant_text)}"
+
+    return _twiml(
+        f"""
+        <Play>{reply_url}</Play>
+        <Redirect method=\"POST\">{b}/twilio/voice</Redirect>
+        """
+    )
+
+
+@app.get("/twilio/tts")
+async def twilio_tts(text: str = "", voice_id: str = "ubuXFxVQwVYnZQhy"):
+    text = (text or "")[:400]
+    wav = await _gradium_tts_wav_bytes(text=text, voice_id=voice_id)
+    return Response(content=wav, media_type="audio/wav")
+
 
 @app.get("/health")
 async def health_check():
@@ -1094,85 +1239,15 @@ async def health_check():
     }
 
 
-# =========================
-# Twilio voice integration
-# =========================
-def twiml(body: str) -> Response:
-    xml = f'<?xml version="1.0" encoding="UTF-8"?><Response>{body}</Response>'
-    return Response(content=xml, media_type="application/xml")
+# ===== Voice Chat Mode (Web) =====
+# Adds conversational voice loop using existing Gradium STT/TTS + OpenAI
 
-def public_base_url(request: Request) -> str:
-    proto = request.headers.get("x-forwarded-proto", "https")
-    host = request.headers.get("host")
-    return f"{proto}://{host}"
+@app.post("/api/voice_turn")
+async def voice_turn(session_id: str = Form(...), file: UploadFile = File(...)):
+    audio = await file.read()
+    # reuse existing STT endpoint logic
+    stt_result = await stt(file=UploadFile(filename=file.filename, file=file.file))
+    text = stt_result.get("text", "")
+    reply = await _openai_reply(session_id, text)
+    return {"transcript": text, "reply": reply}
 
-def download_twilio_recording(recording_url: str) -> bytes:
-    sid = os.getenv("TWILIO_ACCOUNT_SID", "")
-    token = os.getenv("TWILIO_AUTH_TOKEN", "")
-    if not sid or not token:
-        raise ValueError("Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN")
-
-    url = recording_url + ".wav"
-    req = urllib.request.Request(url)
-    auth = base64.b64encode(f"{sid}:{token}".encode("utf-8")).decode("utf-8")
-    req.add_header("Authorization", f"Basic {auth}")
-    with urllib.request.urlopen(req, timeout=25) as resp:
-        return resp.read()
-
-@app.post("/twilio/voice")
-async def twilio_voice(request: Request):
-    b = public_base_url(request)
-    prompt = "Hi. You are connected to Gradium. Speak after the beep."
-
-    prompt_url = f"{b}/twilio/tts?text={quote_plus(prompt)}"
-    return twiml(
-        f"<Play>{prompt_url}</Play>"
-        f"<Record action='{b}/twilio/recorded' method='POST' playBeep='true' maxLength='10' trim='trim-silence'/>"
-        f"<Say>Goodbye.</Say>"
-    )
-
-@app.post("/twilio/recorded")
-async def twilio_recorded(
-    request: Request,
-    RecordingUrl: str = Form(None),
-    CallSid: str = Form(None),
-):
-    b = public_base_url(request)
-
-    if not RecordingUrl:
-        msg = "I did not get the recording. Please try again."
-        return twiml(f"<Play>{b}/twilio/tts?text={quote_plus(msg)}</Play><Redirect method='POST'>{b}/twilio/voice</Redirect>")
-
-    try:
-        audio = download_twilio_recording(RecordingUrl)
-        converted = convert_audio_with_ffmpeg(audio, "twilio.wav")
-        stt_result = await client.stt(
-            setup={"model_name": "default", "input_format": "wav"},
-            audio=converted,
-        )
-        user_text = (getattr(stt_result, "text", "") or "").strip()
-    except Exception as e:
-        msg = f"Sorry, I could not transcribe that: {str(e)}"
-        return twiml(f"<Play>{b}/twilio/tts?text={quote_plus(msg)}</Play><Redirect method='POST'>{b}/twilio/voice</Redirect>")
-
-    if not user_text:
-        msg = "I did not catch that. Please try again."
-        return twiml(f"<Play>{b}/twilio/tts?text={quote_plus(msg)}</Play><Redirect method='POST'>{b}/twilio/voice</Redirect>")
-
-    try:
-        reply_text = await openai_generate_reply(CallSid or "call", user_text)
-    except Exception as e:
-        reply_text = f"Sorry, the AI failed: {str(e)}"
-
-    reply_url = f"{b}/twilio/tts?text={quote_plus(reply_text)}"
-    return twiml(f"<Play>{reply_url}</Play><Redirect method='POST'>{b}/twilio/voice</Redirect>")
-
-@app.get("/twilio/tts")
-async def twilio_tts(text: str = "", voice_id: str = "YTpq7expH9539ERJ"):
-    # Use the same Gradium TTS under the hood
-    text = (text or "")[:500]
-    result = await client.tts(
-        setup={"model_name": "default", "voice_id": voice_id, "output_format": "wav"},
-        text=text,
-    )
-    return Response(content=result.raw_data, media_type="audio/wav")
