@@ -11,9 +11,11 @@ import json
 import os
 import subprocess
 import tempfile
+import urllib.request
+from urllib.parse import quote_plus
 from typing import Optional, List, Dict
 
-from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, UploadFile, File, WebSocket, WebSocketDisconnect, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
@@ -942,6 +944,124 @@ async def speech_to_text(file: UploadFile = File(...)):
         if "1011" in error_msg:
             error_msg = "Audio processing error"
         return JSONResponse(status_code=500, content={"error": error_msg})
+
+
+
+# -------------------------
+# Twilio voice webhook routes (Gradium STT + TTS)
+# -------------------------
+
+def _twiml(body: str) -> Response:
+    xml = f'<?xml version="1.0" encoding="UTF-8"?><Response>{body}</Response>'
+    return Response(content=xml, media_type="application/xml")
+
+
+def _base_url(request: Request) -> str:
+    proto = request.headers.get("x-forwarded-proto", "https")
+    host = request.headers.get("host")
+    return f"{proto}://{host}"
+
+
+def _download_twilio_recording(recording_url: str) -> bytes:
+    """Download a Twilio RecordingUrl using basic auth.
+    Requires TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN env vars.
+    """
+    sid = os.getenv("TWILIO_ACCOUNT_SID", "")
+    token = os.getenv("TWILIO_AUTH_TOKEN", "")
+    if not sid or not token:
+        raise ValueError("Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN")
+
+    url = recording_url
+    if not url.endswith(".wav") and not url.endswith(".mp3"):
+        url = url + ".wav"
+
+    req = urllib.request.Request(url)
+    auth = base64.b64encode(f"{sid}:{token}".encode("utf-8")).decode("utf-8")
+    req.add_header("Authorization", f"Basic {auth}")
+
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return resp.read()
+
+
+async def _gradium_stt_text(audio_bytes: bytes, filename: str = "audio.wav") -> str:
+    if not check_ffmpeg():
+        raise ValueError("ffmpeg is not installed on server")
+
+    converted_audio = convert_audio_with_ffmpeg(audio_bytes, filename)
+    result = await client.stt(
+        setup={"model_name": "default", "input_format": "wav"},
+        audio=converted_audio,
+    )
+    return (getattr(result, "text", "") or "").strip()
+
+
+async def _gradium_tts_wav_bytes(text: str, voice_id: str = "ubuXFxVQwVYnZQhy") -> bytes:
+    result = await client.tts(
+        setup={"model_name": "default", "voice_id": voice_id, "output_format": "wav"},
+        text=text,
+    )
+    return result.raw_data
+
+
+@app.post("/twilio/voice")
+async def twilio_voice(request: Request):
+    """Entry point for inbound calls.
+    Records audio, then Twilio posts RecordingUrl to /twilio/recorded.
+    """
+    b = _base_url(request)
+    prompt = "Hi. You are connected to Gradium. After the beep, speak for a few seconds."
+    prompt_url = f"{b}/twilio/tts?text={quote_plus(prompt)}"
+
+    return _twiml(
+        f"""
+        <Play>{prompt_url}</Play>
+        <Record action=\"{b}/twilio/recorded\" method=\"POST\" playBeep=\"true\" maxLength=\"10\" trim=\"trim-silence\" />
+        <Play>{prompt_url}</Play>
+        """
+    )
+
+
+@app.post("/twilio/recorded")
+async def twilio_recorded(request: Request, RecordingUrl: str = Form(None)):
+    b = _base_url(request)
+
+    if not RecordingUrl:
+        msg = "I did not get the recording. Please try again."
+        return _twiml(
+            f'<Play>{b}/twilio/tts?text={quote_plus(msg)}</Play><Redirect method="POST">{b}/twilio/voice</Redirect>'
+        )
+
+    try:
+        audio = _download_twilio_recording(RecordingUrl)
+        user_text = await _gradium_stt_text(audio, "twilio.wav")
+    except Exception as e:
+        msg = f"Sorry, I could not process that audio. {str(e)}"
+        return _twiml(
+            f'<Play>{b}/twilio/tts?text={quote_plus(msg)}</Play><Redirect method="POST">{b}/twilio/voice</Redirect>'
+        )
+
+    if not user_text:
+        msg = "I did not catch that. Please try again after the beep."
+        return _twiml(
+            f'<Play>{b}/twilio/tts?text={quote_plus(msg)}</Play><Redirect method="POST">{b}/twilio/voice</Redirect>'
+        )
+
+    reply = f"You said: {user_text}. Say something else after the beep."
+    reply_url = f"{b}/twilio/tts?text={quote_plus(reply)}"
+
+    return _twiml(
+        f"""
+        <Play>{reply_url}</Play>
+        <Redirect method=\"POST\">{b}/twilio/voice</Redirect>
+        """
+    )
+
+
+@app.get("/twilio/tts")
+async def twilio_tts(text: str = "", voice_id: str = "ubuXFxVQwVYnZQhy"):
+    text = (text or "")[:400]
+    wav = await _gradium_tts_wav_bytes(text=text, voice_id=voice_id)
+    return Response(content=wav, media_type="audio/wav")
 
 
 @app.get("/health")
