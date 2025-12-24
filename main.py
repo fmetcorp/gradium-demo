@@ -247,7 +247,7 @@ HTML_PAGE = r"""
     <title>Gradium TTS/STT Demo</title>
     <style>
         :root {
-            --bg: #808080;
+            --bg: #0f1419;
             --card: #1a1f2e;
             --text: #e7e9ea;
             --muted: #8b98a5;
