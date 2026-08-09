@@ -1,0 +1,1096 @@
+<title>GTM Control Plane — UI Mockup</title>
+<style>
+  /* ============ tokens: light is the bare :root ============ */
+  :root {
+    --ground:   #F1F4F7;
+    --surface:  #FFFFFF;
+    --sunk:     #E8EDF2;
+    --ink:      #0F1723;
+    --muted:    #5C6B7F;
+    --faint:    #8494A8;
+    --line:     #D9E1E9;
+    --line-soft:#E7ECF1;
+    --accent:   #2D3FA6;
+    --accent-ink:#FFFFFF;
+    --accent-wash:#E7EAF8;
+    --ok:       #0B7A5A;
+    --ok-wash:  #E1F2EC;
+    --warn:     #9A5B08;
+    --warn-wash:#FAEEDC;
+    --block:    #AB2030;
+    --block-wash:#FAE6E8;
+    --shadow:   0 1px 2px rgba(15,23,35,.06), 0 8px 24px -12px rgba(15,23,35,.18);
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0B1017;
+      --surface:  #121A24;
+      --sunk:     #0E151E;
+      --ink:      #E4EAF2;
+      --muted:    #93A2B5;
+      --faint:    #6C7C90;
+      --line:     #222D3B;
+      --line-soft:#1A2430;
+      --accent:   #8FA0FF;
+      --accent-ink:#0B1017;
+      --accent-wash:#1B2440;
+      --ok:       #3DBE93;
+      --ok-wash:  #0F2A24;
+      --warn:     #E0A64A;
+      --warn-wash:#2C2113;
+      --block:    #F1707C;
+      --block-wash:#2E151A;
+      --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0B1017;
+    --surface:  #121A24;
+    --sunk:     #0E151E;
+    --ink:      #E4EAF2;
+    --muted:    #93A2B5;
+    --faint:    #6C7C90;
+    --line:     #222D3B;
+    --line-soft:#1A2430;
+    --accent:   #8FA0FF;
+    --accent-ink:#0B1017;
+    --accent-wash:#1B2440;
+    --ok:       #3DBE93;
+    --ok-wash:  #0F2A24;
+    --warn:     #E0A64A;
+    --warn-wash:#2C2113;
+    --block:    #F1707C;
+    --block-wash:#2E151A;
+    --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono { font-family: var(--mono); }
+
+  /* ============ shell ============ */
+  .shell {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 0;
+    min-height: 100vh;
+    max-width: 1240px;
+    margin: 0 auto;
+  }
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  /* ============ left rail ============ */
+  .rail {
+    border-right: 1px solid var(--line);
+    padding: 28px 20px 28px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    background: var(--surface);
+  }
+  @media (max-width: 860px) {
+    .rail { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+
+  .brand { display: flex; flex-direction: column; gap: 3px; }
+  .brand-name {
+    font-size: 15px; font-weight: 650; letter-spacing: -.015em; margin: 0;
+  }
+  .brand-sub {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--faint); margin: 0;
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 2px; }
+  .step {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 8px;
+    align-items: baseline;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+  }
+  .step:hover { background: var(--sunk); color: var(--ink); }
+  .step-num {
+    font-family: var(--mono); font-size: 11px; color: var(--faint);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .step-label { font-size: 13.5px; }
+  .step[aria-current="true"] {
+    background: var(--accent-wash);
+    color: var(--ink);
+  }
+  .step[aria-current="true"] .step-label { font-weight: 600; }
+  .step[aria-current="true"] .step-num { color: var(--accent); }
+  .step[data-done="true"] .step-num::after {
+    content: " ✓"; color: var(--ok);
+  }
+
+  .rail-foot {
+    margin-top: auto;
+    display: flex; flex-direction: column; gap: 8px;
+    font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+    letter-spacing: .04em;
+  }
+  .rail-foot .dot { color: var(--ok); }
+
+  /* ============ main ============ */
+  .main { padding: 28px 32px 72px; min-width: 0; }
+  @media (max-width: 860px) { .main { padding: 24px 18px 56px; } }
+
+  .panel { display: none; flex-direction: column; gap: 22px; }
+  .panel[data-active="true"] { display: flex; }
+
+  .head { display: flex; flex-direction: column; gap: 5px; }
+  h1 {
+    font-size: 22px; font-weight: 650; letter-spacing: -.022em;
+    margin: 0; text-wrap: balance;
+  }
+  .head p { margin: 0; color: var(--muted); max-width: 62ch; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--faint); margin: 0 0 2px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  /* ---- step 1: source ---- */
+  .drop {
+    border: 1.5px dashed var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 44px 24px;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    text-align: center;
+    cursor: pointer;
+  }
+  .drop:hover { border-color: var(--accent); background: var(--accent-wash); }
+  .drop-title { font-weight: 600; font-size: 15px; }
+  .drop-hint { color: var(--muted); font-size: 13px; }
+  .drop-formats {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .07em;
+    color: var(--faint); text-transform: uppercase;
+  }
+
+  .or {
+    display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px;
+    align-items: center;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    color: var(--faint); text-transform: uppercase;
+  }
+  .or::before, .or::after { content: ""; height: 1px; background: var(--line); }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  label.lbl {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--faint);
+  }
+  input[type="text"], select {
+    width: 100%;
+    padding: 9px 11px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 13.5px;
+  }
+  input[type="text"] { font-family: var(--mono); font-size: 12.5px; }
+  input[type="text"]:focus-visible, select:focus-visible, .drop:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+
+  .row-inline { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .row-inline > .field { flex: 1 1 260px; }
+
+  /* ---- buttons ---- */
+  .btn {
+    padding: 9px 16px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit; font-size: 13.5px; font-weight: 550;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--sunk); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .btn-primary {
+    background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
+  }
+  .btn-primary:hover { background: var(--accent); filter: brightness(1.08); }
+  .btn-danger { border-color: var(--block); color: var(--block); }
+  .btn-danger:hover { background: var(--block-wash); }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+  .actions {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    padding-top: 2px;
+  }
+  .actions .spacer { flex: 1; }
+  .actions .note { color: var(--muted); font-size: 12.5px; }
+
+  /* ---- step 2: mapping ---- */
+  .map-table { width: 100%; border-collapse: collapse; }
+  .map-table th {
+    text-align: left; padding: 0 0 10px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--faint); font-weight: 500;
+    border-bottom: 1px solid var(--line);
+  }
+  .map-table td {
+    padding: 9px 12px 9px 0;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: middle;
+  }
+  .map-table td:last-child, .map-table th:last-child { padding-right: 0; }
+  .src-col { font-family: var(--mono); font-size: 12.5px; }
+  .src-sample { color: var(--faint); font-family: var(--mono); font-size: 11.5px; }
+  .map-table select { padding: 6px 9px; font-size: 12.5px; }
+  .auto {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .06em;
+    color: var(--ok); text-transform: uppercase;
+  }
+
+  /* ---- stat tiles ---- */
+  .tiles {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
+  }
+  @media (max-width: 720px) { .tiles { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+
+  .tile {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 13px 14px 12px;
+    display: flex; flex-direction: column; gap: 2px;
+    cursor: pointer;
+    text-align: left;
+    font: inherit; color: var(--ink);
+    overflow: hidden;
+  }
+  .tile::before {
+    content: ""; position: absolute; inset: 0 auto 0 0; width: 3px;
+    background: var(--stripe, var(--line));
+  }
+  .tile:hover { background: var(--sunk); }
+  .tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tile[aria-pressed="true"] { border-color: var(--stripe, var(--accent)); background: var(--sunk); }
+  .tile-n {
+    font-family: var(--mono); font-size: 24px; font-weight: 500;
+    letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+    color: var(--stripe, var(--ink)); line-height: 1.15;
+  }
+  .tile-l {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .tile[data-kind="all"]    { --stripe: var(--faint); }
+  .tile[data-kind="ok"]     { --stripe: var(--ok); }
+  .tile[data-kind="warn"]   { --stripe: var(--warn); }
+  .tile[data-kind="block"]  { --stripe: var(--block); }
+
+  /* ---- review table ---- */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .table-bar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--sunk);
+  }
+  .table-cap {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .05em;
+    color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  .table-bar .spacer { flex: 1; }
+  .linkbtn {
+    border: 0; background: none; padding: 0; cursor: pointer;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .05em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .linkbtn:hover { text-decoration: underline; }
+  .linkbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .scroll { overflow-x: auto; }
+
+  table.rows { width: 100%; border-collapse: collapse; min-width: 880px; }
+  table.rows th {
+    text-align: left;
+    padding: 9px 12px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--faint); font-weight: 500;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  table.rows td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  table.rows tr:last-child td { border-bottom: 0; }
+  table.rows tbody tr:hover td { background: var(--sunk); }
+  /* Only rows the operator unchecked are dimmed. Blocked rows stay legible —
+     the reason a contact was held is the most useful thing on this screen. */
+  table.rows tr[data-v="ok"][data-excluded="true"] td,
+  table.rows tr[data-v="warn"][data-excluded="true"] td { opacity: .4; }
+  table.rows tr[data-v="block"] td { background: var(--block-wash); }
+  table.rows tr[data-v="block"]:hover td { background: var(--block-wash); }
+
+  td.c-check { width: 34px; padding-left: 14px; }
+  td.c-check input { margin: 2px 0 0; cursor: pointer; accent-color: var(--accent); }
+  th.c-check { width: 34px; padding-left: 14px; }
+
+  .who { display: flex; flex-direction: column; gap: 1px; }
+  .who-name { font-weight: 550; white-space: nowrap; }
+  .who-title { color: var(--faint); font-size: 12px; white-space: nowrap; }
+  .co { display: flex; flex-direction: column; gap: 1px; }
+  .co-name { white-space: nowrap; }
+  .co-dom { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .addr { font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+  .addr .li { color: var(--faint); display: block; }
+
+  .verdict {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+    text-transform: uppercase; font-weight: 500;
+    padding: 3px 7px; border-radius: 4px; white-space: nowrap;
+  }
+  .verdict[data-v="ok"]    { color: var(--ok);    background: var(--ok-wash); }
+  .verdict[data-v="warn"]  { color: var(--warn);  background: var(--warn-wash); }
+  .verdict[data-v="block"] {
+    color: var(--block); background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--block);
+  }
+
+  .issues { display: flex; flex-direction: column; gap: 4px; }
+  .chip {
+    align-self: flex-start;
+    font-family: var(--mono); font-size: 10.5px;
+    padding: 2px 6px; border-radius: 4px;
+    border: 1px solid transparent;
+  }
+  .chip[data-v="warn"]  { color: var(--warn);  border-color: var(--warn); }
+  .chip[data-v="block"] { color: var(--block); border-color: var(--block); }
+  .why { color: var(--muted); font-size: 12px; }
+  .dash { color: var(--faint); font-family: var(--mono); }
+
+  /* ---- step 4: assign ---- */
+  .assign-grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px;
+  }
+  @media (max-width: 720px) { .assign-grid { grid-template-columns: minmax(0,1fr); } }
+
+  .dest {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .dest-head { display: flex; align-items: baseline; gap: 8px; }
+  .dest-name { font-weight: 600; font-size: 14.5px; }
+  .dest-kind {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--faint);
+  }
+  .dest-stat {
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .preview {
+    background: var(--sunk);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .preview h3 {
+    margin: 0; font-size: 13px; font-weight: 600;
+    font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .dry-group { display: flex; flex-direction: column; gap: 2px; }
+  .dry-group[data-off="true"] { display: none; }
+  .dry-head {
+    margin: 0; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--faint);
+  }
+  .ledger { display: flex; flex-direction: column; gap: 0; }
+  .ledger-line {
+    display: grid; grid-template-columns: minmax(0,1fr) auto;
+    gap: 12px; align-items: baseline;
+    padding: 7px 0;
+    border-bottom: 1px dashed var(--line);
+    font-family: var(--mono); font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  .ledger-line:last-child { border-bottom: 0; }
+  .ledger-line .n { font-weight: 600; }
+  .ledger-line[data-v="ok"] .n    { color: var(--ok); }
+  .ledger-line[data-v="warn"] .n  { color: var(--warn); }
+  .ledger-line[data-v="block"] .n { color: var(--block); }
+  .ledger-line .k { color: var(--muted); }
+
+  pre.payload {
+    margin: 0; padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+    color: var(--muted);
+    overflow-x: auto;
+  }
+  pre.payload .k { color: var(--accent); }
+  pre.payload .s { color: var(--ok); }
+
+  .result {
+    display: none;
+    border: 1px solid var(--ok);
+    background: var(--ok-wash);
+    border-radius: 9px;
+    padding: 14px 16px;
+    flex-direction: column; gap: 4px;
+  }
+  .result[data-shown="true"] { display: flex; }
+  .result-line {
+    font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--ok);
+    font-variant-numeric: tabular-nums;
+  }
+  .result-sub { font-size: 12.5px; color: var(--muted); }
+
+  .guard {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    font-size: 12.5px; color: var(--muted);
+  }
+  .guard code {
+    font-family: var(--mono); font-size: 11.5px;
+    background: var(--sunk); border: 1px solid var(--line);
+    padding: 1px 5px; border-radius: 4px; color: var(--ink);
+  }
+
+  .banner {
+    display: flex; gap: 10px; align-items: flex-start;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 11px 14px;
+    font-size: 12.5px; color: var(--muted);
+  }
+  .banner strong { color: var(--ink); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="shell">
+  <nav class="rail" aria-label="Import steps">
+    <div class="brand">
+      <p class="brand-name">GTM Control Plane</p>
+      <p class="brand-sub">Fish Audio</p>
+    </div>
+
+    <div class="steps" role="tablist" aria-label="Steps">
+      <button class="step" role="tab" data-step="1" aria-current="true">
+        <span class="step-num">01</span><span class="step-label">Source</span>
+      </button>
+      <button class="step" role="tab" data-step="2">
+        <span class="step-num">02</span><span class="step-label">Map columns</span>
+      </button>
+      <button class="step" role="tab" data-step="3">
+        <span class="step-num">03</span><span class="step-label">Review</span>
+      </button>
+      <button class="step" role="tab" data-step="4">
+        <span class="step-num">04</span><span class="step-label">Assign &amp; push</span>
+      </button>
+    </div>
+
+    <div class="rail-foot">
+      <div><span class="dot">●</span> instantly · connected</div>
+      <div><span class="dot">●</span> heyreach · connected</div>
+      <div><span class="dot">●</span> crm · deals sheet</div>
+    </div>
+  </nav>
+
+  <main class="main">
+
+    <!-- ============ 01 SOURCE ============ -->
+    <section class="panel" data-panel="1" data-active="true">
+      <div class="head">
+        <p class="eyebrow">Step 01</p>
+        <h1>Bring in a list</h1>
+        <p>Nothing reaches Instantly or HeyReach without passing through here.</p>
+      </div>
+
+      <div class="drop" tabindex="0" role="button" id="drop">
+        <span class="drop-title">Drop a CSV, or click to choose a file</span>
+        <span class="drop-hint">Up to 50,000 rows</span>
+        <span class="drop-formats">csv · tsv</span>
+      </div>
+
+      <div class="or"><span>or</span></div>
+
+      <div class="card">
+        <div class="row-inline">
+          <div class="field">
+            <label class="lbl" for="sheet">Google Sheet URL</label>
+            <input type="text" id="sheet" value="https://docs.google.com/spreadsheets/d/1kQ7…/edit#gid=0">
+          </div>
+          <button class="btn" id="fetch-sheet">Fetch</button>
+        </div>
+      </div>
+
+      <div class="banner">
+        <span>
+          <strong>seed-list-voice-ai-q3.csv</strong> · 842 rows · uploaded by colin@fishaudio.com ·
+          today 09:14
+        </span>
+      </div>
+
+      <div class="actions">
+        <span class="spacer"></span>
+        <button class="btn btn-primary" data-goto="2">Map columns →</button>
+      </div>
+    </section>
+
+    <!-- ============ 02 MAP ============ -->
+    <section class="panel" data-panel="2">
+      <div class="head">
+        <p class="eyebrow">Step 02</p>
+        <h1>Confirm the column map</h1>
+        <p>Guessed from your headers. Change anything that looks wrong — columns mapped as
+           personalization variables are checked for empty cells.</p>
+      </div>
+
+      <div class="card">
+        <div class="scroll">
+          <table class="map-table">
+            <thead>
+              <tr>
+                <th>Column in file</th>
+                <th>First value</th>
+                <th>Maps to</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="map-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" data-goto="1">← Back</button>
+        <span class="spacer"></span>
+        <span class="note">11 of 12 columns mapped</span>
+        <button class="btn btn-primary" data-goto="3">Validate 842 rows →</button>
+      </div>
+    </section>
+
+    <!-- ============ 03 REVIEW ============ -->
+    <section class="panel" data-panel="3">
+      <div class="head">
+        <p class="eyebrow">Step 03</p>
+        <h1>Review what passed</h1>
+        <p>Blocked rows can't be pushed. Warnings can — uncheck anything you'd rather hold back.</p>
+      </div>
+
+      <div class="tiles" role="group" aria-label="Filter by verdict">
+        <button class="tile" data-kind="all"   data-filter="all"   aria-pressed="true">
+          <span class="tile-n" id="n-all">842</span><span class="tile-l">rows</span>
+        </button>
+        <button class="tile" data-kind="ok"    data-filter="ok"    aria-pressed="false">
+          <span class="tile-n" id="n-ok">771</span><span class="tile-l">ready</span>
+        </button>
+        <button class="tile" data-kind="warn"  data-filter="warn"  aria-pressed="false">
+          <span class="tile-n" id="n-warn">48</span><span class="tile-l">warnings</span>
+        </button>
+        <button class="tile" data-kind="block" data-filter="block" aria-pressed="false">
+          <span class="tile-n" id="n-block">23</span><span class="tile-l">blocked</span>
+        </button>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-bar">
+          <span class="table-cap" id="cap">First 20 of 842 rows</span>
+          <span class="spacer"></span>
+          <button class="linkbtn" id="drop-warns">Uncheck all warnings</button>
+          <button class="linkbtn" id="reset-sel">Reset</button>
+        </div>
+        <div class="scroll">
+          <table class="rows">
+            <thead>
+              <tr>
+                <th class="c-check"><input type="checkbox" id="check-all" checked aria-label="Select all"></th>
+                <th>Contact</th>
+                <th>Company</th>
+                <th>Reach</th>
+                <th>Verdict</th>
+                <th>Why</th>
+              </tr>
+            </thead>
+            <tbody id="rows-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" data-goto="2">← Back</button>
+        <span class="spacer"></span>
+        <span class="note" id="sel-note">771 selected</span>
+        <button class="btn btn-primary" data-goto="4">Assign to campaigns →</button>
+      </div>
+    </section>
+
+    <!-- ============ 04 ASSIGN ============ -->
+    <section class="panel" data-panel="4">
+      <div class="head">
+        <p class="eyebrow">Step 04</p>
+        <h1>Assign and push</h1>
+        <p>A dry run always runs first. Nothing sends until you push.</p>
+      </div>
+
+      <div class="assign-grid">
+        <div class="dest">
+          <div class="dest-head">
+            <span class="dest-name">Instantly</span>
+            <span class="dest-kind">email</span>
+          </div>
+          <div class="field">
+            <label class="lbl" for="inst-camp">Campaign</label>
+            <select id="inst-camp">
+              <option>Q3 · Voice API · Games &amp; Media</option>
+              <option>Q3 · Voice API · EdTech</option>
+              <option>Q3 · Dubbing · Enterprise</option>
+              <option>— don't push to Instantly —</option>
+            </select>
+          </div>
+          <div class="dest-stat" id="inst-stat">712 of 771 have a valid email</div>
+        </div>
+
+        <div class="dest">
+          <div class="dest-head">
+            <span class="dest-name">HeyReach</span>
+            <span class="dest-kind">linkedin</span>
+          </div>
+          <div class="field">
+            <label class="lbl" for="hr-camp">Campaign</label>
+            <select id="hr-camp">
+              <option>Q3 · Founders &amp; Heads of Audio</option>
+              <option>Q3 · Localization Leads</option>
+              <option>— don't push to HeyReach —</option>
+            </select>
+          </div>
+          <div class="dest-stat" id="hr-stat">664 of 771 have a LinkedIn profile</div>
+        </div>
+      </div>
+
+      <div class="preview">
+        <h3>Dry run</h3>
+
+        <div class="dry-group" id="dry-inst">
+          <p class="dry-head">Instantly · email</p>
+          <div class="ledger">
+            <div class="ledger-line" data-v="ok">
+              <span class="k">new contacts to add</span><span class="n" id="d-inst-add">712</span>
+            </div>
+            <div class="ledger-line">
+              <span class="k">skipped · already in workspace</span><span class="n">12</span>
+            </div>
+            <div class="ledger-line">
+              <span class="k">skipped · no email on record</span><span class="n">47</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dry-group" id="dry-hr">
+          <p class="dry-head">HeyReach · linkedin</p>
+          <div class="ledger">
+            <div class="ledger-line" data-v="ok">
+              <span class="k">new contacts to add</span><span class="n" id="d-hr-add">661</span>
+            </div>
+            <div class="ledger-line">
+              <span class="k">skipped · already in campaign</span><span class="n">3</span>
+            </div>
+            <div class="ledger-line">
+              <span class="k">skipped · no LinkedIn profile</span><span class="n">107</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ledger">
+          <div class="ledger-line" data-v="block">
+            <span class="k">held from both · open deal, suppressed, or invalid</span><span class="n">23</span>
+          </div>
+        </div>
+
+        <pre class="payload"><span class="k">POST</span> api.instantly.ai/api/v2/leads/list   <span class="k">·</span> batch 1 of 8
+{
+  <span class="k">"campaign"</span>: <span class="s">"Q3 · Voice API · Games &amp; Media"</span>,
+  <span class="k">"skip_if_in_workspace"</span>: <span class="s">true</span>,
+  <span class="k">"leads"</span>: [
+    { <span class="k">"email"</span>: <span class="s">"m.okonkwo@rivetgames.com"</span>,
+      <span class="k">"first_name"</span>: <span class="s">"Mara"</span>,
+      <span class="k">"company_name"</span>: <span class="s">"Rivet Games"</span>,
+      <span class="k">"custom_variables"</span>: { <span class="k">"title"</span>: <span class="s">"VP Product"</span> } },
+    … 99 more
+  ]
+}</pre>
+      </div>
+
+      <div class="guard">
+        <span>Pushes over 500 need confirmation. Type</span>
+        <code>PUSH</code>
+        <span>to unlock.</span>
+        <input type="text" id="confirm" placeholder="PUSH" style="max-width:110px" aria-label="Confirmation phrase">
+      </div>
+
+      <div class="actions">
+        <button class="btn" data-goto="3">← Back</button>
+        <span class="spacer"></span>
+        <button class="btn" id="rerun">Re-run dry run</button>
+        <button class="btn btn-primary" id="push" disabled>Push 712 contacts</button>
+      </div>
+
+      <div class="result" id="result">
+        <span class="result-line" id="result-line">pushed 712 · skipped 12 · failed 0</span>
+        <span class="result-sub" id="result-sub">Recorded in the ledger.</span>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- step navigation ---------- */
+  var steps  = Array.prototype.slice.call(document.querySelectorAll(".step"));
+  var panels = Array.prototype.slice.call(document.querySelectorAll(".panel"));
+  var seen = { 1: true };
+
+  function go(n) {
+    n = String(n);
+    seen[n] = true;
+    steps.forEach(function (s) {
+      var me = s.dataset.step === n;
+      s.setAttribute("aria-current", me ? "true" : "false");
+      s.dataset.done = (!me && seen[s.dataset.step]) ? "true" : "false";
+    });
+    panels.forEach(function (p) {
+      p.dataset.active = p.dataset.panel === n ? "true" : "false";
+    });
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  steps.forEach(function (s) {
+    s.addEventListener("click", function () { go(s.dataset.step); });
+  });
+  document.querySelectorAll("[data-goto]").forEach(function (b) {
+    b.addEventListener("click", function () { go(b.dataset.goto); });
+  });
+
+  /* ---------- step 1 ---------- */
+  document.getElementById("drop").addEventListener("click", function () { go(2); });
+  document.getElementById("fetch-sheet").addEventListener("click", function () { go(2); });
+
+  /* ---------- step 2: column map ---------- */
+  var COLUMNS = [
+    ["First Name",      "Mara",                      "first_name",     true],
+    ["Last Name",       "Okonkwo",                   "last_name",      true],
+    ["Title",           "VP Product",                "title *",        true],
+    ["Company",         "Rivet Games",               "company_name *", true],
+    ["Website",         "rivetgames.com",            "company_domain", true],
+    ["Email",           "m.okonkwo@rivetgames.com",  "email",          true],
+    ["LinkedIn",        "linkedin.com/in/maraokon…", "linkedin_url",   true],
+    ["Country",         "United States",             "country",        true],
+    ["Employees",       "180",                       "custom_headcount", true],
+    ["Tech",            "Unity, Wwise",              "custom_stack",   true],
+    ["Source",          "Clay · games-seed-3",       "list_source",    true],
+    ["Notes",           "from Q2 webinar",           "— ignore —",     false]
+  ];
+  var TARGETS = ["first_name","last_name","title *","company_name *","company_domain","email",
+                 "linkedin_url","country","custom_headcount","custom_stack","list_source",
+                 "phone","seniority","— ignore —"];
+
+  var mapBody = document.getElementById("map-body");
+  COLUMNS.forEach(function (c) {
+    var tr = document.createElement("tr");
+
+    var td1 = document.createElement("td");
+    td1.className = "src-col";
+    td1.textContent = c[0];
+
+    var td2 = document.createElement("td");
+    td2.className = "src-sample";
+    td2.textContent = c[1];
+
+    var td3 = document.createElement("td");
+    var sel = document.createElement("select");
+    TARGETS.forEach(function (t) {
+      var o = document.createElement("option");
+      o.textContent = t;
+      if (t === c[2]) { o.selected = true; }
+      sel.appendChild(o);
+    });
+    td3.appendChild(sel);
+
+    var td4 = document.createElement("td");
+    if (c[3]) { td4.innerHTML = '<span class="auto">auto</span>'; }
+
+    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4);
+    mapBody.appendChild(tr);
+  });
+
+  /* ---------- step 3: rows ---------- */
+  /* v: ok | warn | block   code: issue slug   why: plain-language detail */
+  var ROWS = [
+    ["Mara Okonkwo","VP Product","Rivet Games","rivetgames.com","m.okonkwo@rivetgames.com","/in/maraokonkwo","ok","",""],
+    ["Daniel Reyes","Head of Localization","Northwind Studios","northwind.studio","d.reyes@northwind.studio","/in/danreyes","ok","",""],
+    ["—","—","Lumen Learning","lumenlearning.io","info@lumenlearning.io","","warn","role_address","Shared inbox, not a person"],
+    ["Priya Raghavan","CTO","Halcyon Health","halcyonhealth.com","p.raghavan@halcyonhealth.com","/in/priyaraghavan","block","open_deal","Contract sent · owner J. Fields"],
+    ["Tom Brolin","Dir. Engineering","Castle IVR","castleivr.com","tom@castleivr.com","/in/tombrolin","block","already_sequenced","Instantly · Q2 Voice API · 41 days ago"],
+    ["Anna Wexler","Producer","Sable Audio","sableaudio.fm","annawexler@gmail.com","/in/annawexler","warn","free_mail","Personal address for a work contact"],
+    ["Kenji Mori","—","Torchlight Media","torchlightmedia.jp","k.mori@torchlightmedia.jp","/in/kenjimori","block","empty_personalization","Template uses {{title}} — cell is empty"],
+    ["Sofia Almeida","Head of Content Ops","Verso Publishing","verso.pt","s.almeida@verso.pt","/in/sofiaalmeida","ok","",""],
+    ["Greg Paulsen","Founder","Anvil Interactive","anvilinteractive.com","","sales-nav link","block","bad_linkedin_url","Sales Navigator link — HeyReach rejects these"],
+    ["Ravi Chandra","Platform Lead","Kestrel Telecom","kestreltelecom.in","r.chandra@kestreltelecom.in","/in/ravichandra","block","suppressed","Unsubscribed 2026-03-14"],
+    ["Elena Vasquez","VP Marketing","Brightpath EdTech","brightpath.edu.co","e.vasquez@brightpath.edu.co","/in/elenavasquez","ok","",""],
+    ["Marcus Webb","Dir. Product","Onyx Interactive","onyxinteractive.com","m.webb@onyxinteractive.com","/in/marcuswebb","ok","",""],
+    ["Jules Ferrand","Head of Audio","Meridian Films","meridianfilms.fr","j.ferrand@meridianfilms.fr","/in/julesferrand","ok","",""],
+    ["Hana Kim","Localization Manager","Aster Games","astergames.kr","h.kim@astergames.kr","/in/hanakim","ok","",""],
+    ["—","—","Copperfield Voice","copperfieldvoice.com","sales@copperfieldvoice.com","","warn","role_address","Shared inbox, not a person"],
+    ["Owen Tate","CEO","Tidewater Podcasts","tidewaterpods.com","owen@tidewaterpods.com","/in/owentate","block","in_destination","Already in the Instantly workspace"],
+    ["Nadia Haddad","VP Engineering","Solstice Labs","solsticelabs.io","n.haddad@solsticelabs.io","/in/nadiahaddad","ok","",""],
+    ["Peter Lund","Product Manager","Fjord Interactive","fjord.no","p.lund@fjord.no","/in/peterlund","warn","cooldown","Contacted 62 days ago · window is 90"],
+    ["Amara Diallo","Head of AI","Cobalt Health","cobalthealth.com","a.diallo@cobalthealth.com","/in/amaradiallo","warn","account_collision","3 contacts already in flight at this domain"],
+    ["Liam O'Shea","Dir. Ops","Harborview Media","harborview.media","liam@harborview,media","/in/liamoshea","block","malformed_email","Comma instead of a dot"]
+  ];
+
+  var VERDICT_LABEL = { ok: "ready", warn: "warn", block: "blocked" };
+  var body = document.getElementById("rows-body");
+
+  function cell(cls, html) {
+    var td = document.createElement("td");
+    if (cls) { td.className = cls; }
+    td.innerHTML = html;
+    return td;
+  }
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  ROWS.forEach(function (r, i) {
+    var name = r[0], title = r[1], co = r[2], dom = r[3],
+        email = r[4], li = r[5], v = r[6], code = r[7], why = r[8];
+
+    var tr = document.createElement("tr");
+    tr.dataset.v = v;
+    tr.dataset.excluded = v === "block" ? "true" : "false";
+
+    var chk = document.createElement("td");
+    chk.className = "c-check";
+    var box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = v !== "block";
+    box.disabled = v === "block";
+    box.setAttribute("aria-label", "Include " + (name === "—" ? email : name));
+    box.addEventListener("change", function () {
+      tr.dataset.excluded = box.checked ? "false" : "true";
+      tally();
+    });
+    chk.appendChild(box);
+    tr.appendChild(chk);
+
+    tr.appendChild(cell("", '<div class="who"><span class="who-name">' + esc(name) +
+      '</span><span class="who-title">' + esc(title) + '</span></div>'));
+
+    tr.appendChild(cell("", '<div class="co"><span class="co-name">' + esc(co) +
+      '</span><span class="co-dom">' + esc(dom) + '</span></div>'));
+
+    tr.appendChild(cell("addr", (email ? esc(email) : '<span class="dash">no email</span>') +
+      '<span class="li">' + (li ? esc(li) : '<span class="dash">no linkedin</span>') + '</span>'));
+
+    tr.appendChild(cell("", '<span class="verdict" data-v="' + v + '">' + VERDICT_LABEL[v] + '</span>'));
+
+    tr.appendChild(cell("", code
+      ? '<div class="issues"><span class="chip" data-v="' + v + '">' + esc(code) +
+        '</span><span class="why">' + esc(why) + '</span></div>'
+      : '<span class="dash">—</span>'));
+
+    body.appendChild(tr);
+  });
+
+  /* ---------- filtering ---------- */
+  var TOTALS = { all: 842, ok: 771, warn: 48, block: 23 };
+  var tiles = Array.prototype.slice.call(document.querySelectorAll(".tile"));
+  var cap = document.getElementById("cap");
+  var filter = "all";
+
+  function applyFilter() {
+    var shown = 0;
+    Array.prototype.forEach.call(body.rows, function (tr) {
+      var hit = filter === "all" || tr.dataset.v === filter;
+      tr.style.display = hit ? "" : "none";
+      if (hit) { shown++; }
+    });
+    cap.textContent = filter === "all"
+      ? "First 20 of 842 rows"
+      : "Showing " + shown + " of " + TOTALS[filter] + " " +
+        (filter === "ok" ? "ready" : filter === "warn" ? "warnings" : "blocked") + " · sample";
+  }
+
+  tiles.forEach(function (t) {
+    t.addEventListener("click", function () {
+      filter = t.dataset.filter;
+      tiles.forEach(function (o) {
+        o.setAttribute("aria-pressed", o === t ? "true" : "false");
+      });
+      applyFilter();
+    });
+  });
+
+  /* ---------- selection tally ---------- */
+  var selNote = document.getElementById("sel-note");
+  var pushBtn = document.getElementById("push");
+  var confirmBox = document.getElementById("confirm");
+  var nOk = document.getElementById("n-ok");
+  var baseReady = 771;
+
+  var instSel  = document.getElementById("inst-camp");
+  var hrSel    = document.getElementById("hr-camp");
+  var dryInst  = document.getElementById("dry-inst");
+  var dryHr    = document.getElementById("dry-hr");
+  var last     = { inst: 0, hr: 0 };
+
+  function isOff(sel) { return sel.value.indexOf("don't push") !== -1; }
+
+  function tally() {
+    var dropped = 0;
+    Array.prototype.forEach.call(body.rows, function (tr) {
+      if (tr.dataset.v !== "block" && tr.dataset.excluded === "true") { dropped++; }
+    });
+    var ready = baseReady - dropped;
+    nOk.textContent = ready;
+    selNote.textContent = ready + " selected";
+
+    /* 47 have no email + 12 already in the workspace; 107 have no profile + 3 in campaign */
+    var onInst = !isOff(instSel), onHr = !isOff(hrSel);
+    var nInst = onInst ? ready - 59  : 0;
+    var nHr   = onHr   ? ready - 110 : 0;
+
+    dryInst.dataset.off = onInst ? "false" : "true";
+    dryHr.dataset.off   = onHr   ? "false" : "true";
+    document.getElementById("d-inst-add").textContent = nInst;
+    document.getElementById("d-hr-add").textContent = nHr;
+    document.getElementById("inst-stat").textContent =
+      onInst ? (ready - 47) + " of " + ready + " have a valid email" : "not receiving this list";
+    document.getElementById("hr-stat").textContent =
+      onHr ? (ready - 107) + " of " + ready + " have a LinkedIn profile" : "not receiving this list";
+
+    last.inst = nInst; last.hr = nHr;
+
+    var parts = [];
+    if (onInst) { parts.push(nInst + " email"); }
+    if (onHr)   { parts.push(nHr + " linkedin"); }
+    pushBtn.textContent = parts.length ? "Push " + parts.join(" + ") : "Pick a campaign";
+    gate();
+  }
+
+  function gate() {
+    var none = isOff(instSel) && isOff(hrSel);
+    pushBtn.disabled = none || confirmBox.value.trim().toUpperCase() !== "PUSH";
+  }
+  confirmBox.addEventListener("input", gate);
+  instSel.addEventListener("change", tally);
+  hrSel.addEventListener("change", tally);
+
+  document.getElementById("check-all").addEventListener("change", function (e) {
+    Array.prototype.forEach.call(body.rows, function (tr) {
+      var b = tr.querySelector("input");
+      if (!b.disabled) {
+        b.checked = e.target.checked;
+        tr.dataset.excluded = e.target.checked ? "false" : "true";
+      }
+    });
+    tally();
+  });
+
+  document.getElementById("drop-warns").addEventListener("click", function () {
+    Array.prototype.forEach.call(body.rows, function (tr) {
+      if (tr.dataset.v === "warn") {
+        tr.querySelector("input").checked = false;
+        tr.dataset.excluded = "true";
+      }
+    });
+    tally();
+  });
+
+  document.getElementById("reset-sel").addEventListener("click", function () {
+    Array.prototype.forEach.call(body.rows, function (tr) {
+      var b = tr.querySelector("input");
+      if (!b.disabled) { b.checked = true; tr.dataset.excluded = "false"; }
+    });
+    document.getElementById("check-all").checked = true;
+    tally();
+  });
+
+  /* ---------- push ---------- */
+  var result = document.getElementById("result");
+  pushBtn.addEventListener("click", function () {
+    var lines = [];
+    if (last.inst) { lines.push("instantly · pushed " + last.inst + " · skipped 12 · failed 0"); }
+    if (last.hr)   { lines.push("heyreach · pushed " + last.hr + " · skipped 3 · failed 0"); }
+    document.getElementById("result-line").innerHTML = lines.join("<br>");
+    document.getElementById("result-sub").textContent =
+      "Recorded in the ledger at 09:22. The next list you import will be checked against these " +
+      (last.inst + last.hr) + " assignments.";
+    result.dataset.shown = "true";
+    pushBtn.disabled = true;
+    pushBtn.textContent = "Pushed";
+  });
+
+  document.getElementById("rerun").addEventListener("click", function () {
+    result.dataset.shown = "false";
+    tally();
+  });
+
+  applyFilter();
+  tally();
+})();
+</script>
