@@ -28,6 +28,10 @@ except ImportError:
 
 app = FastAPI(title="Gradium Demo")
 
+# Apple Store inventory checker (iPhone Duo stock finder) at /inventory
+from inventory import router as inventory_router
+app.include_router(inventory_router)
+
 # Create the Gradium client
 client = gradium.client.GradiumClient()
 
